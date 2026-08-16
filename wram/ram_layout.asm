@@ -253,3 +253,6 @@ BANK_SELECTED:
 
 WRAM_DisableScreenFlag: ;thanks pellsson :)
 	.byte $00
+
+WRAM_CopyPAL: ;PPU revisions prior to 2C02G cannot read palette RAM
+	.res $20, $00

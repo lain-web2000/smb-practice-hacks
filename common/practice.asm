@@ -1827,7 +1827,6 @@ LoadState:
 		lda #$00
 		tax
 		sta PPU_ADDRESS
-		lda PPU_DATA ; Internal buffer; throw
 
 		ldy #$20
 @copy_pal:
@@ -1940,13 +1939,12 @@ SaveState:
 		sta PPU_ADDRESS
 		lda PPU_DATA ; Internal buffer; throw
 
-		ldy #$20
+		ldy #$1F
 @copy_pal:
-		lda PPU_DATA
-		sta WRAM_SavePAL, x
-		inx
+		lda WRAM_CopyPAL, y
+		sta WRAM_SavePAL, y
 		dey
-		bne @copy_pal
+		bpl @copy_pal
 
 		ldx #(WRAM_ToSaveFile_End - WRAM_ToSaveFile)-1
 @save_wram:

@@ -1879,9 +1879,15 @@ Save8Bits:    pla
               rts
 
 ;------------------------------------------------------------------------------------
+;$00 - vram buffer address table low
+;$01 - vram buffer address table high
+;$02 - offset into palette RAM
+;$03 - number of bytes to write to palette RAM
 
 WriteBufferToScreen:
                sta PPU_ADDRESS           ;store high byte of vram address
+               cmp #$3f
+               beq WritePaletteRAM       ;branch if writing to palette RAM
                iny
                lda ($00),y               ;load next byte (second)
                sta PPU_ADDRESS           ;store low byte of vram address
@@ -1916,18 +1922,63 @@ UpdateAddr:    sec
                lda #$00
                adc $01
                sta $01
-               lda #$3f                  ;sets vram address to palette memory
-               sta PPU_ADDRESS
-               lda #$00
-               sta PPU_ADDRESS
-               sta PPU_ADDRESS           ;then reinitializes it for some reason
-               sta PPU_ADDRESS
 UpdateScreen:  ldy #$00                  ;load first byte from indirect as a pointer
-               lda ($00),y  
+               lda ($00),y
                bne WriteBufferToScreen   ;if byte is zero we have no further updates to make here
 InitScroll:    sta PPU_SCROLL_REG        ;store contents of A into scroll registers
                sta PPU_SCROLL_REG        ;and end whatever subroutine led us here
                rts
+
+WritePaletteRAM:
+               iny
+               lda ($00),y               ;load next byte (second)
+               sta PPU_ADDRESS           ;store low byte of vram address
+               and #%00011111
+               sta $02                   ;store offset into palette RAM
+               iny
+               ldx #%10001000
+               lda ($00),y               ;load next byte (third)
+               bpl SetupPalWrite
+               ldx #%10001100
+SetupPalWrite: stx PPU_CTRL_REG1
+               and #%01111111
+               cmp #%01000000
+               bcc LiteralPalData
+               and #%00111111
+               sta $03
+               ldx $02
+               iny                       ;otherwise increment Y to load next byte
+               lda ($00),y               ;load more data from buffer and write to vram
+RepeatPalByte: sta PPU_DATA
+               sta WRAM_CopyPAL,x        ;copy to buffer for save state system
+               inx                       ;keep palette RAM offset in range
+               cpx #$20
+               bcc DecPalRun
+               ldx #$00
+DecPalRun:     dec $03                   ;done writing?
+               bne RepeatPalByte
+               beq PalCorruptFix
+LiteralPalData:
+               and #%00111111
+               sta $03
+               ldx $02
+NextPalByte:   iny                       ;otherwise increment Y to load next byte
+               lda ($00),y
+               sta PPU_DATA
+               sta WRAM_CopyPAL,x        ;copy to buffer for save state system
+               inx                       ;keep palette RAM offset in range
+               cpx #$20
+               bcc DecPalLiteral
+               ldx #$00
+DecPalLiteral: dec $03
+               bne NextPalByte
+PalCorruptFix: lda #$3f                  ;sets vram address to palette memory
+               sta PPU_ADDRESS
+               lda #$00
+               sta PPU_ADDRESS
+               sta PPU_ADDRESS           ;then reinitializes it to work around palette corruption
+               sta PPU_ADDRESS
+               beq UpdateAddr            ;branch back to main VRAM transfer loop
 
 ;------------------------------------------------------------------------------------
 
